@@ -1,51 +1,54 @@
 import typescript from '@rollup/plugin-typescript';
 import terser from '@rollup/plugin-terser';
-
-const output = {
-	banner: `/*
- * @license
- * docx-preview <https://github.com/VolodymyrBaydalka/docxjs>
- * Released under Apache License 2.0  <https://github.com/VolodymyrBaydalka/docxjs/blob/master/LICENSE>
- * Copyright Volodymyr Baydalka
- */`,
-	sourcemap: true,
-}
+import nodeExternals from 'rollup-plugin-node-externals';
 
 const umdOutput = {
-	...output,
 	name: "docx",
-	file: 'dist/docx-preview.js',
+	file: 'docs/js/docx-preview.js',
+	sourcemap: true,
 	format: 'umd',
 	globals: {
-		jszip: 'JSZip'
-	},
+		jszip: 'JSZip',
+		konva: 'Konva',
+		"lodash-es": '_',
+	}
 };
 
 export default args => {
 	const config = {
 		input: 'src/docx-preview.ts',
 		output: [umdOutput],
-		plugins: [typescript()]
+		plugins: [
+			nodeExternals(),
+			typescript(),
+		],
 	}
 
-	if (args.environment == 'BUILD:production')
+	if (args.environment === 'BUILD:production') {
+		// 输出配置
 		config.output = [umdOutput,
+			{
+				...umdOutput,
+				file: 'dist/docx-preview.js',
+			},
 			{
 				...umdOutput,
 				file: 'dist/docx-preview.min.js',
 				plugins: [terser()]
 			},
 			{
-				...output,
-				file: 'dist/docx-preview.mjs',
+				file: 'dist/docx-preview.esm.js',
+				sourcemap: true,
 				format: 'es',
 			},
 			{
-				...output,
-				file: 'dist/docx-preview.min.mjs',
+				file: 'dist/docx-preview.esm.min.js',
+				sourcemap: true,
 				format: 'es',
 				plugins: [terser()]
-			}];
+			},
+		];
+	}
 
 	return config
 };

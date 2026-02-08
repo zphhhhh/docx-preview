@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     "module": "ES2022",
-    "moduleResolution": "bundler",
     "declaration": false,
     "noImplicitAny": false,
     "noEmitOnError": true,
@@ -12,12 +11,13 @@
     "noEmitHelpers": false,
     "importHelpers": false,
     "esModuleInterop": true,
-    "target": "ES2020",
+    "moduleResolution": "bundler",
+    "target": "es6",
     "noEmit": true,
     "lib": [
       "ESNext",
-      "dom"
-    ],
+      "DOM"
+    ]
   },
   "exclude": [
     "node_modules"

@@ -1,4 +1,5 @@
 import { OutputType } from "jszip";
+import mime from './mime';
 
 import { DocumentParser } from './document-parser';
 import { Relationship, RelationshipTypes } from './common/relationship';
@@ -17,7 +18,6 @@ import { EndnotesPart, FootnotesPart } from "./notes/parts";
 import { SettingsPart } from "./settings/settings-part";
 import { CustomPropsPart } from "./document-props/custom-props-part";
 import { CommentsPart } from "./comments/comments-part";
-import { CommentsExtendedPart } from "./comments/comments-extended-part";
 
 const topLevelRels = [
 	{ type: RelationshipTypes.OfficeDocument, target: "word/document.xml" },
@@ -26,6 +26,7 @@ const topLevelRels = [
 	{ type: RelationshipTypes.CustomProperties, target: "docProps/custom.xml" },
 ];
 
+// word文件解析器：blob对象 => Object对象
 export class WordDocument {
 	private _package: OpenXmlPackage;
 	private _parser: DocumentParser;
@@ -46,18 +47,18 @@ export class WordDocument {
 	extendedPropsPart: ExtendedPropsPart;
 	settingsPart: SettingsPart;
 	commentsPart: CommentsPart;
-	commentsExtendedPart: CommentsExtendedPart;
 
 	static async load(blob: Blob | any, parser: DocumentParser, options: any): Promise<WordDocument> {
 		var d = new WordDocument();
 
 		d._options = options;
 		d._parser = parser;
+		// 解压缩word文件转换为Office Open XML
 		d._package = await OpenXmlPackage.load(blob, options);
 		d.rels = await d._package.loadRelationships();
 
 		await Promise.all(topLevelRels.map(rel => {
-			const r = d.rels.find(x => x.type === rel.type) ?? rel; //fallback                    
+			const r = d.rels.find(x => x.type === rel.type) ?? rel; //fallback
 			return d.loadRelationshipPart(r.target, r.type);
 		}));
 
@@ -125,17 +126,13 @@ export class WordDocument {
 			case RelationshipTypes.CustomProperties:
 				part = new CustomPropsPart(this._package, path);
 				break;
-	
+
 			case RelationshipTypes.Settings:
 				this.settingsPart = part = new SettingsPart(this._package, path);
 				break;
 
 			case RelationshipTypes.Comments:
 				this.commentsPart = part = new CommentsPart(this._package, path, this._parser);
-				break;
-
-			case RelationshipTypes.CommentsExtended:
-				this.commentsExtendedPart = part = new CommentsExtendedPart(this._package, path);
 				break;
 		}
 
@@ -156,13 +153,13 @@ export class WordDocument {
 	}
 
 	async loadDocumentImage(id: string, part?: Part): Promise<string> {
-		const x = await this.loadResource(part ?? this.documentPart, id, "blob");
-		return this.blobToURL(x);
+		const blob = await this.loadResource(part ?? this.documentPart, id, "blob");
+		return this.blobToURL(blob);
 	}
 
 	async loadNumberingImage(id: string): Promise<string> {
-		const x = await this.loadResource(this.numberingPart, id, "blob");
-		return this.blobToURL(x);
+		const blob = await this.loadResource(this.numberingPart, id, "blob");
+		return this.blobToURL(blob);
 	}
 
 	async loadFont(id: string, key: string): Promise<string> {
@@ -185,9 +182,9 @@ export class WordDocument {
 		return URL.createObjectURL(blob);
 	}
 
-	findPartByRelId(id: string, basePart: Part = null) {
-		var rel = (basePart.rels ?? this.rels).find(r => r.id == id);
-		const folder = basePart ? splitPath(basePart.path)[0] : '';
+	findPartByRelId(id: string, documentPart: Part = null) {
+		var rel = (documentPart.rels ?? this.rels).find(r => r.id == id);
+		const folder = documentPart ? splitPath(documentPart.path)[0] : '';
 		return rel ? this.partsMap[resolvePath(rel.target, folder)] : null;
 	}
 
@@ -197,9 +194,19 @@ export class WordDocument {
 		return rel ? resolvePath(rel.target, folder) : null;
 	}
 
-	private loadResource(part: Part, id: string, outputType: OutputType) {
+
+	private async loadResource(part: Part, id: string, outputType: OutputType) {
 		const path = this.getPathById(part, id);
-		return path ? this._package.load(path, outputType) : Promise.resolve(null);
+		// TODO 暂时使用文件扩展名推断MIME类型，实际上并不准确
+		let type = mime.getType(path);
+		if (path) {
+			// 图片类型在读取过程中丢失，jszip包的缺陷
+			let origin_blob = await this._package.load(path, outputType);
+			// 修改Blob中的type类型
+			return new Blob([origin_blob], { type });
+		} else {
+			return Promise.resolve(null);
+		}
 	}
 }
 
@@ -214,6 +221,5 @@ export function deobfuscate(data: Uint8Array, guidKey: string) {
 	for (let i = 0; i < 32; i++)
 		data[i] = data[i] ^ numbers[i % len]
 
-	// FIXME: return type
-	return data as any;
+	return data;
 }
