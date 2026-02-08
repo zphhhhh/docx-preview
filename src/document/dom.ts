@@ -13,6 +13,7 @@ export enum DomType {
 	Row = "row",
 	Cell = "cell",
 	Hyperlink = "hyperlink",
+	SmartTag = "smartTag",
 	Drawing = "drawing",
 	Image = "image",
 	Text = "text",
@@ -67,7 +68,8 @@ export enum DomType {
 	Comment = "comment",
 	CommentReference = "commentReference",
 	CommentRangeStart = "commentRangeStart",
-	CommentRangeEnd = "commentRangeEnd"
+	CommentRangeEnd = "commentRangeEnd",
+	AltChunk = "altChunk"
 }
 
 // TODO 分离Math类型
@@ -139,6 +141,15 @@ export abstract class OpenXmlElementBase implements OpenXmlElement {
 export interface WmlHyperlink extends OpenXmlElement {
 	id?: string;
 	href?: string;
+}
+
+export interface WmlAltChunk extends OpenXmlElement {
+	id?: string;
+}
+
+export interface WmlSmartTag extends OpenXmlElement {
+	uri?: string;
+	element?: string;
 }
 
 export interface WmlNoteReference extends OpenXmlElement {

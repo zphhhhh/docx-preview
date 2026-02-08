@@ -20,8 +20,11 @@ export interface Options {
 	ignoreWidth: boolean;                   //disables rendering width of page
 
 	inWrapper: boolean;                     //enables rendering of wrapper around document content
+	hideWrapperOnPrint: boolean;            //hides wrapper on print
 
+	renderAltChunks: boolean;               //enables rendering of altChunk elements
 	renderChanges: boolean;                 //enables experimental rendering of document changes (inserions/deletions)
+	renderComments: boolean;                //enables comments rendering
 	renderEndnotes: boolean;                //enables endnotes rendering
 	renderFooters: boolean;                 //enables footers rendering
 	renderFootnotes: boolean;               //enables footnotes rendering
@@ -46,8 +49,11 @@ export const defaultOptions: Options = {
 	ignoreWidth: false,
 
 	inWrapper: true,
+	hideWrapperOnPrint: false,
 
+	renderAltChunks: true,
 	renderChanges: false,
+	renderComments: false,
 	renderEndnotes: true,
 	renderFooters: true,
 	renderFootnotes: true,

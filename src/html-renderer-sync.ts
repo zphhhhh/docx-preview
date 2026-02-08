@@ -19,7 +19,7 @@ import { ThemePart } from './theme/theme-part';
 import { BaseHeaderFooterPart } from './header-footer/parts';
 import { Part } from './common/part';
 import { VmlElement } from './vml/vml';
-import { WmlCommentRangeStart, WmlCommentReference } from './comments/elements';
+import { WmlComment, WmlCommentRangeStart, WmlCommentReference } from './comments/elements';
 import Konva from 'konva';
 import type { Stage } from 'konva/lib/Stage';
 import type { Layer } from 'konva/lib/Layer';
@@ -100,6 +100,15 @@ export class HtmlRendererSync {
 	// Konva框架--layer元素
 	konva_layer: Layer;
 
+	// Comment rendering
+	commentHighlight: any;
+	commentMap: Record<string, Range> = {};
+	postRenderTasks: any[] = [];
+
+	later(func: Function) {
+		this.postRenderTasks.push(func);
+	}
+
 	/**
 	 * Object对象 => HTML标签
 	 *
@@ -120,6 +129,10 @@ export class HtmlRendererSync {
 		this.rootSelector = options.inWrapper ? `.${this.className}-wrapper` : ':root';
 		// 文档CSS样式
 		this.styleMap = null;
+		// Comment highlight initialization
+		if (this.options.renderComments && globalThis.Highlight) {
+			this.commentHighlight = new Highlight();
+		}
 		// 主体容器
 		this.bodyContainer = bodyContainer;
 		// 样式容器，可传参指定，默认为主体容器
@@ -187,12 +200,18 @@ export class HtmlRendererSync {
 		this.konva_stage.visible(false);
 		// 刷新制表符
 		this.refreshTabStops();
+		// Comment highlight registration
+		if (this.commentHighlight && options.renderComments) {
+			(CSS as any).highlights.set(`${this.className}-comments`, this.commentHighlight);
+		}
+		// Execute deferred post-render tasks (comment range positioning)
+		this.postRenderTasks.forEach(t => t());
 	}
 
 	// 渲染默认样式
 	renderDefaultStyle() {
 		const c = this.className;
-		const styleText = `
+		let styleText = `
 			.${c} { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif }
 			.${c}-wrapper { background: gray; padding: 30px; padding-bottom: 0px; display: flex; flex-flow: column; align-items: center; line-height:normal; font-weight:normal; } 
 			.${c}-wrapper>section.${c} { background: white; box-shadow: 0 0 10px rgba(0, 0, 0, 0.5); margin-bottom: 30px; }
@@ -210,6 +229,15 @@ export class HtmlRendererSync {
 			.${c} svg { fill: transparent; }
 			.${c} .clearfix::after { content: ""; display: block; line-height: 0; clear: both; }
 		`;
+
+		if (this.options.renderComments) {
+			styleText += `
+.${c}-comment-ref { cursor: default; }
+.${c}-comment-popover { display: none; z-index: 1000; padding: 0.5rem; background: white; position: absolute; box-shadow: 0 0 0.25rem rgba(0, 0, 0, 0.25); width: 30ch; }
+.${c}-comment-ref:hover~.${c}-comment-popover { display: block; }
+.${c}-comment-author,.${c}-comment-date { font-size: 0.875rem; color: #888; }
+`;
+		}
 
 		return createStyleElement(styleText);
 	}
@@ -1727,24 +1755,24 @@ export class HtmlRendererSync {
 			case DomType.CommentRangeStart:
 				oNode = this.renderCommentRangeStart(elem);
 				// 作为子元素插入,忽略溢出检测
-				if (parent) {
-					appendChildren(parent, oNode);
+				if (parent && oNode) {
+					(parent as Element).appendChild(oNode);
 				}
 				break;
 
 			case DomType.CommentRangeEnd:
 				oNode = this.renderCommentRangeEnd(elem);
 				// 作为子元素插入,忽略溢出检测
-				if (parent) {
-					appendChildren(parent, oNode);
+				if (parent && oNode) {
+					(parent as Element).appendChild(oNode);
 				}
 				break;
 
 			case DomType.CommentReference:
-				oNode = this.renderCommentReference(elem);
+				oNode = await this.renderCommentReference(elem);
 				// 作为子元素插入,忽略溢出检测
-				if (parent) {
-					appendChildren(parent, oNode);
+				if (parent && oNode) {
+					(parent as Element).appendChild(oNode);
 				}
 				break;
 
@@ -2626,35 +2654,66 @@ export class HtmlRendererSync {
 
 	// 注释开始
 	renderCommentRangeStart(commentStart: WmlCommentRangeStart) {
-		if (!this.options.experimental) {
+		if (!this.options.renderComments)
 			return null;
-		}
 
-		return document.createComment(`start of comment #${commentStart.id}`);
+		const rng = new Range();
+		this.commentHighlight?.add(rng);
+
+		const result = document.createComment(`start of comment #${commentStart.id}`);
+		this.later(() => rng.setStart(result, 0));
+		this.commentMap[commentStart.id] = rng;
+
+		return result;
 	}
 
 	// 注释结束
 	renderCommentRangeEnd(commentEnd: WmlCommentRangeStart) {
-		if (!this.options.experimental) {
+		if (!this.options.renderComments)
 			return null;
-		}
 
-		return document.createComment(`end of comment #${commentEnd.id}`);
+		const rng = this.commentMap[commentEnd.id];
+		const result = document.createComment(`end of comment #${commentEnd.id}`);
+		this.later(() => rng?.setEnd(result, 0));
+
+		return result;
 	}
 
 	// 注释
-	renderCommentReference(commentRef: WmlCommentReference) {
-		if (!this.options.experimental) {
+	async renderCommentReference(commentRef: WmlCommentReference) {
+		if (!this.options.renderComments)
 			return null;
-		}
 
-		const comment = this.document.commentsPart?.commentMap[commentRef.id];
+		var comment = this.document.commentsPart?.commentMap[commentRef.id];
 
-		if (!comment) return null;
+		if (!comment)
+			return null;
 
-		return document.createComment(
-			`comment #${comment.id} by ${comment.author} on ${comment.date}`
-		);
+		const frg = new DocumentFragment();
+		const commentRefEl = createElement("span", { className: `${this.className}-comment-ref` });
+		commentRefEl.textContent = '\u{1F4AC}';
+		const commentsContainerEl = createElement("div", { className: `${this.className}-comment-popover` });
+
+		await this.renderCommentContent(comment, commentsContainerEl);
+
+		frg.appendChild(document.createComment(`comment #${comment.id} by ${comment.author} on ${comment.date}`));
+		frg.appendChild(commentRefEl);
+		frg.appendChild(commentsContainerEl);
+
+		return frg;
+	}
+
+	// 渲染注释内容
+	async renderCommentContent(comment: WmlComment, container: Node) {
+		const authorEl = createElement('div', { className: `${this.className}-comment-author` });
+		authorEl.textContent = comment.author;
+		container.appendChild(authorEl);
+
+		const dateEl = createElement('div', { className: `${this.className}-comment-date` });
+		dateEl.textContent = new Date(comment.date).toLocaleString();
+		container.appendChild(dateEl);
+
+		await this.renderElements(comment.children, container as HTMLElement);
 	}
 
 	// 渲染页眉页脚

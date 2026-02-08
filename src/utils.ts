@@ -47,6 +47,17 @@ export function resolvePath(path: string, base: string): string {
 	}
 }
 
+export function keyBy<T = any>(array: T[], by: (x: T) => any): Record<any, T> {
+    return array.reduce((a, x) => {
+        a[by(x)] = x;
+        return a;
+    }, {});
+}
+
+export function clamp(val, min, max) {
+    return min > val ? min : (max < val ? max : val);
+}
+
 export function blobToBase64(blob: Blob): Promise<string> {
 	return new Promise((resolve, reject) => {
 		const reader = new FileReader();

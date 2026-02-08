@@ -34,6 +34,7 @@ import { ThemePart } from './theme/theme-part';
 import { BaseHeaderFooterPart } from './header-footer/parts';
 import { Part } from './common/part';
 import { VmlElement } from './vml/vml';
+import { WmlComment, WmlCommentRangeStart, WmlCommentReference } from './comments/elements';
 import Konva from 'konva';
 import type { Stage } from 'konva/lib/Stage';
 import type { Layer } from 'konva/lib/Layer';
@@ -99,6 +100,7 @@ export class HtmlRenderer {
 	defaultTabSize: string;
 	// 当前制表位
 	currentTabs: any[] = [];
+	tabsTimeout: any = 0;
 
 	commentHighlight: any;
 	commentMap: Record<string, Range> = {};
@@ -110,6 +112,10 @@ export class HtmlRenderer {
 	konva_stage: Stage;
 	// Konva框架--layer元素
 	konva_layer: Layer;
+
+	later(func: Function) {
+		this.postRenderTasks.push(func);
+	}
 
 	/**
 	 * Object对象 => HTML标签
@@ -134,6 +140,10 @@ export class HtmlRenderer {
 		// styleContainer== null，styleContainer = bodyContainer
 		styleContainer = styleContainer || bodyContainer;
 
+		if (this.options.renderComments && globalThis.Highlight) {
+			this.commentHighlight = new Highlight();
+		}
+
 		// CSS样式生成容器，清空所有CSS样式
 		removeAllElements(styleContainer);
 		// HTML生成容器，清空所有HTML元素
@@ -146,21 +156,21 @@ export class HtmlRenderer {
 
 		// 主题CSS样式
 		if (document.themePart) {
-			styleContainer.appendChild(this.createComment("docxjs document theme values"));
+			appendComment(styleContainer, "docxjs document theme values");
 			this.renderTheme(document.themePart, styleContainer);
 		}
 		// 文档默认CSS样式，包含表格、列表、段落、字体，样式存在继承顺序
 		if (document.stylesPart != null) {
 			this.styleMap = this.processStyles(document.stylesPart.styles);
 
-			styleContainer.appendChild(this.createComment("docxjs document styles"));
+			appendComment(styleContainer, "docxjs document styles");
 			styleContainer.appendChild(this.renderStyles(document.stylesPart.styles));
 		}
 		// 多级列表样式
 		if (document.numberingPart) {
 			this.processNumberings(document.numberingPart.domNumberings);
 
-			styleContainer.appendChild(this.createComment("docxjs document numbering styles"));
+			appendComment(styleContainer, "docxjs document numbering styles");
 			styleContainer.appendChild(this.renderNumbering(document.numberingPart.domNumberings, styleContainer));
 			//styleContainer.appendChild(this.renderNumbering2(document.numberingPart, styleContainer));
 		}
@@ -188,6 +198,12 @@ export class HtmlRenderer {
 			appendChildren(bodyContainer, pageElements);
 		}
 
+		if (this.commentHighlight && options.renderComments) {
+			(CSS as any).highlights.set(`${this.className}-comments`, this.commentHighlight);
+		}
+
+		this.postRenderTasks.forEach(t => t());
+
 		// 刷新制表符
 		this.refreshTabStops();
 	}
@@ -211,6 +227,15 @@ export class HtmlRenderer {
 			.${c} img, ${c} svg { vertical-align: baseline; }
 			.${c} .clearfix::after { content: ""; display: block; line-height: 0; clear: both; }
 		`;
+
+		if (this.options.renderComments) {
+			styleText += `
+.${c}-comment-ref { cursor: default; }
+.${c}-comment-popover { display: none; z-index: 1000; padding: 0.5rem; background: white; position: absolute; box-shadow: 0 0 0.25rem rgba(0, 0, 0, 0.25); width: 30ch; }
+.${c}-comment-ref:hover~.${c}-comment-popover { display: block; }
+.${c}-comment-author,.${c}-comment-date { font-size: 0.875rem; color: #888; }
+`
+		};
 
 		return createStyleElement(styleText);
 	}
@@ -239,7 +264,7 @@ export class HtmlRenderer {
 		}
 
 		const cssText = this.styleToString(`.${this.className}`, variables);
-		styleContainer.appendChild(this.createStyleElement(cssText));
+		styleContainer.appendChild(createStyleElement(cssText));
 	}
 
 	// 计算className，小写，默认前缀："docx_"
@@ -383,7 +408,7 @@ export class HtmlRenderer {
 			});
 		}
 
-		return this.createStyleElement(styleText);
+		return createStyleElement(styleText);
 	}
 
 	numberingClass(id: string, lvl: number) {
@@ -1133,6 +1158,15 @@ export class HtmlRenderer {
 			case DomType.Deleted:
 				return this.renderDeleted(elem);
 
+			case DomType.CommentRangeStart:
+				return this.renderCommentRangeStart(elem as WmlCommentRangeStart);
+
+			case DomType.CommentRangeEnd:
+				return this.renderCommentRangeEnd(elem as WmlCommentRangeStart);
+
+			case DomType.CommentReference:
+				return this.renderCommentReference(elem as WmlCommentReference);
+
 		}
 
 		return null;
@@ -1283,6 +1317,61 @@ export class HtmlRenderer {
 		}
 
 		return null;
+	}
+
+	renderCommentRangeStart(commentStart: WmlCommentRangeStart) {
+		if (!this.options.renderComments)
+			return null;
+
+		const rng = new Range();
+		this.commentHighlight?.add(rng);
+
+		const result = document.createComment(`start of comment #${commentStart.id}`);
+		this.later(() => rng.setStart(result, 0));
+		this.commentMap[commentStart.id] = rng;
+
+		return result;
+	}
+
+	renderCommentRangeEnd(commentEnd: WmlCommentRangeStart) {
+		if (!this.options.renderComments)
+			return null;
+
+		const rng = this.commentMap[commentEnd.id];
+		const result = document.createComment(`end of comment #${commentEnd.id}`);
+		this.later(() => rng?.setEnd(result, 0));
+
+		return result;
+	}
+
+	renderCommentReference(commentRef: WmlCommentReference) {
+		if (!this.options.renderComments)
+			return null;
+
+		var comment = this.document.commentsPart?.commentMap[commentRef.id];
+
+		if (!comment)
+			return null;
+
+		const frg = new DocumentFragment();
+		const commentRefEl = createElement("span", { className: `${this.className}-comment-ref` });
+		commentRefEl.textContent = '\u{1F4AC}';
+		const commentsContainerEl = createElement("div", { className: `${this.className}-comment-popover` });
+
+		this.renderCommentContent(comment, commentsContainerEl);
+
+		frg.appendChild(document.createComment(`comment #${comment.id} by ${comment.author} on ${comment.date}`));
+		frg.appendChild(commentRefEl);
+		frg.appendChild(commentsContainerEl);
+
+		return frg;
+	}
+
+	renderCommentContent(comment: WmlComment, container: Node) {
+		container.appendChild(createElement('div', { className: `${this.className}-comment-author` }, [comment.author]));
+		container.appendChild(createElement('div', { className: `${this.className}-comment-date` }, [new Date(comment.date).toLocaleString()]));
+
+		this.renderElements(comment.children, container as HTMLElement);
 	}
 
 	renderSymbol(elem: WmlSymbol) {

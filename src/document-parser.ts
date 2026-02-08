@@ -1,4 +1,4 @@
-import { BreakType, DomType, IDomNumbering, NumberingPicBullet, OpenXmlElement, WmlBreak, WmlCharacter, WmlDrawing, WmlHyperlink, WmlImage, WmlLastRenderedPageBreak, WmlNoteReference, WmlSymbol, WmlTable, WmlTableCell, WmlTableColumn, WmlTableRow, WmlText, WrapType } from './document/dom';
+import { BreakType, DomType, IDomNumbering, NumberingPicBullet, OpenXmlElement, WmlAltChunk, WmlBreak, WmlCharacter, WmlDrawing, WmlHyperlink, WmlImage, WmlLastRenderedPageBreak, WmlNoteReference, WmlSmartTag, WmlSymbol, WmlTable, WmlTableCell, WmlTableColumn, WmlTableRow, WmlText, WrapType } from './document/dom';
 import { DocumentElement } from './document/document';
 import { parseParagraphProperties, parseParagraphProperty, WmlParagraph } from './document/paragraph';
 import { parseSectionProperties, SectionProperties } from './document/section';
@@ -124,7 +124,7 @@ export class DocumentParser {
 					break;
 
 				case "altChunk":
-					children.push(this.parseAltChunk(elem));
+					children.push(this.parseAltChunk(child));
 					break;
 
 				case "tbl":
@@ -147,6 +147,10 @@ export class DocumentParser {
 		});
 
 		return children;
+	}
+
+	parseAltChunk(node: Element): WmlAltChunk {
+		return { type: DomType.AltChunk, children: [], id: xml.attr(node, "id") };
 	}
 
 	parseStylesFile(xstyles: Element): IDomStyle[] {
@@ -503,7 +507,7 @@ export class DocumentParser {
 		return result;
 	}
 
-	parseNumberingFile(xnums: Element): IDomNumbering[] {
+	parseNumberingFile(node: Element): IDomNumbering[] {
 		let result = [];
 		const mapping = {};
 		let bullets = [];
@@ -849,9 +853,9 @@ export class DocumentParser {
 						console.warn(`DOCX:%c Unknown Hyperlink Element：${child.localName}`, 'color:#f75607');
 					}
 			}
-		}
+		});
 
-		return result;
+		return wmlHyperlink;
 	}
 
 	parseSmartTag(node: Element, parent?: OpenXmlElement): WmlSmartTag {
@@ -868,12 +872,12 @@ export class DocumentParser {
 		for (const c of xml.elements(node)) {
 			switch (c.localName) {
 				case "r":
-					result.children.push(this.parseRun(c, result));
+					result.children.push(this.parseRun(c));
 					break;
 			}
 		}
 
-		return wmlHyperlink;
+		return result;
 	}
 
 	parseRun(node: Element): WmlRun {
@@ -902,10 +906,6 @@ export class DocumentParser {
 
 				case "commentReference":
 					wmlRun.children.push(new WmlCommentReference(xml.attr(child, "id")));
-					break;
-
-				case "commentReference":
-					result.children.push(new WmlCommentReference(xml.attr(c, "id")));
 					break;
 
 				case "fldSimple":
@@ -997,7 +997,7 @@ export class DocumentParser {
 						console.warn(`DOCX:%c Unknown Run Element：${child.localName}`, 'color:#f75607');
 					}
 			}
-		}
+		});
 
 		return wmlRun;
 	}
@@ -2407,7 +2407,7 @@ export class DocumentParser {
 					}
 					break;
 			}
-		}
+		});
 
 		return style;
 	}
