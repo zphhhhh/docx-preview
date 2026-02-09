@@ -3810,8 +3810,8 @@
             return globalXmlParser.lengthAttr(c, "w");
         }
         static valueOfBorder(c) {
-            let type = globalXmlParser.attr(c, "val");
-            if (type == "nil") {
+            let type = values.parseBorderType(globalXmlParser.attr(c, "val"));
+            if (type == "none") {
                 return "none";
             }
             let color = xmlUtil.colorAttr(c, "color");

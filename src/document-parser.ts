@@ -2729,9 +2729,9 @@ class values {
 	}
 
 	static valueOfBorder(c: Element) {
-		let type = xml.attr(c, "val");
+		let type = values.parseBorderType(xml.attr(c, "val"));
 
-		if (type == "nil") {
+		if (type == "none") {
 			return "none";
 		}
 
