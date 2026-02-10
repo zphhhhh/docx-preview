@@ -2328,6 +2328,8 @@ export class HtmlRendererSync {
 	async renderDrawing(elem: WmlDrawing, parent: HTMLElement) {
 		const oDrawing = createElement('span');
 
+		oDrawing.style.display = 'inline-block';
+		oDrawing.style.position = 'relative';
 		oDrawing.style.textIndent = '0px';
 
 		// TODO 外围添加一个元素清除浮动

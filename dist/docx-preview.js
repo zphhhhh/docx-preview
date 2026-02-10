@@ -6696,6 +6696,8 @@
         renderDrawing(elem, parent) {
             return __awaiter(this, void 0, void 0, function* () {
                 const oDrawing = createElement('span');
+                oDrawing.style.display = 'inline-block';
+                oDrawing.style.position = 'relative';
                 oDrawing.style.textIndent = '0px';
                 oDrawing.dataset.wrap = elem === null || elem === void 0 ? void 0 : elem.props.wrapType;
                 this.renderStyleValues(elem.cssStyle, oDrawing);
