@@ -2326,12 +2326,10 @@ export class DocumentParser {
 					style["vertical-align"] = values.valueOfTextAlignment(c);
 					break;
 
-				// 	TODO
+				// 	cell width (tcW)：与 origin-backup 一致，非 ignoreWidth 时 fall-through 到 tblW 设置 width
 				case "tcW":
-					if (this.options.ignoreWidth) {
-					}
-					break;
-
+					if (this.options.ignoreWidth)
+						break;
 				case "tblW":
 					style["width"] = values.valueOfSize(c, "w");
 					break;

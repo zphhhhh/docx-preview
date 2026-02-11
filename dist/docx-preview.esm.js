@@ -3479,8 +3479,8 @@ class DocumentParser {
                     style["vertical-align"] = values.valueOfTextAlignment(c);
                     break;
                 case "tcW":
-                    if (this.options.ignoreWidth) ;
-                    break;
+                    if (this.options.ignoreWidth)
+                        break;
                 case "tblW":
                     style["width"] = values.valueOfSize(c, "w");
                     break;
@@ -6572,6 +6572,9 @@ class HtmlRendererSync {
             this.tableVerticalMerges.push(this.currentVerticalMerge);
             this.currentVerticalMerge = {};
             this.currentCellPosition = { col: 0, row: 0 };
+            if (elem.columns) {
+                this.renderTableColumns(elem.columns, oTable);
+            }
             this.renderClass(elem, oTable);
             this.renderStyleValues(elem.cssStyle, oTable);
             let is_overflow;
@@ -6579,9 +6582,6 @@ class HtmlRendererSync {
             if (is_overflow === Overflow.TRUE) {
                 oTable.dataset.overflow = Overflow.SELF;
                 return oTable;
-            }
-            if (elem.columns) {
-                this.renderTableColumns(elem.columns, oTable);
             }
             oTable.dataset.overflow = yield this.renderChildren(elem, oTable);
             this.currentVerticalMerge = this.tableVerticalMerges.pop();

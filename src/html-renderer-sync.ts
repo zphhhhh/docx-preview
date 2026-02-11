@@ -2177,9 +2177,11 @@ export class HtmlRendererSync {
 		this.currentVerticalMerge = {};
 		// 当前Table的行列位置
 		this.currentCellPosition = { col: 0, row: 0 };
-		// 渲染class
+		// 与 origin-backup 一致：先插入 colgroup，再 class，再 style
+		if (elem.columns) {
+			this.renderTableColumns(elem.columns, oTable);
+		}
 		this.renderClass(elem, oTable);
-		// 渲染style
 		this.renderStyleValues(elem.cssStyle, oTable);
 		// 溢出标识
 		let is_overflow: Overflow;
@@ -2189,10 +2191,6 @@ export class HtmlRendererSync {
 			oTable.dataset.overflow = Overflow.SELF;
 
 			return oTable;
-		}
-		// 渲染表格column列
-		if (elem.columns) {
-			this.renderTableColumns(elem.columns, oTable);
 		}
 		// 针对后代子元素进行溢出检测
 		oTable.dataset.overflow = await this.renderChildren(elem, oTable);
